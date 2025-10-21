@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ar">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gender Detection</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+
+    <style>
+      body{
+        margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;
+        display:flex;flex-direction:column;justify-content:center;align-items:center;
+        height:100vh;overflow:hidden;
+      }
+      h1{margin-bottom:20px;font-size:32px;font-weight:bold}
+      .frame{
+        width:720px;height:560px;border:2px solid #fff;border-radius:10px;
+        display:flex;justify-content:center;align-items:center;background:#000;
+      }
+      video,canvas{width:100%;height:100%;border-radius:10px;object-fit:cover}
+      #message{margin-top:16px;font-size:24px;font-weight:bold;text-align:center}
+
+      /* المعرض */
+      #gallery{
+        margin-top:16px;display:none;gap:14px;justify-content:center;flex-wrap:wrap;
+      }
+      #gallery img{
+        width:220px;height:300px;object-fit:cover;
+        border:2px solid #fff;border-radius:10px;transition:transform .25s ease;
+      }
+      #gallery img:hover{transform:scale(1.04)}
+    </style>
+  </head>
+  <body>
+    <h1>مرشدك في التسوق</h1>
+
+    <div class="frame"><canvas id="webcamCanvas"></canvas></div>
+    <h2 id="message"></h2>
+    <div id="gallery"></div>
+    <audio id="audio" autoplay></audio>
+
+    <script>
+      const URL = "./model/";
+      let model, webcam;
+      const message = document.getElementById("message");
+      const audio = document.getElementById("audio");
+      const webcamCanvas = document.getElementById("webcamCanvas");
+      const gallery = document.getElementById("gallery");
+
+      async function init(){
+        try{
+          model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+          const flip = true;
+          webcam = new tmImage.Webcam(720, 560, flip);
+          await webcam.setup(); await webcam.play();
+          webcamCanvas.replaceWith(webcam.canvas);
+          requestAnimationFrame(loop);
+        }catch(e){ console.error("init error:", e); }
+      }
+
+      async function loop(){
+        webcam.update();
+        await predict();
+        requestAnimationFrame(loop);
+      }
+
+      function renderGallery(images){
+        gallery.innerHTML = "";
+        images.forEach(src=>{
+          const img = new Image();
+          img.alt = "store";
+          img.src = src;
+          img.onerror = ()=>console.error("❌ Image not found:", src);
+          gallery.appendChild(img);
+        });
+        gallery.style.display = "flex";
+      }
+
+      let lastLabel=null, lastDetectionTime=0;
+
+      async function predict(){
+        const predictions = await model.predict(webcam.canvas);
+        if(!predictions?.length) return;
+
+        const now = Date.now();
+        const female = predictions.find(p=>p.className.toLowerCase().includes("female"));
+        const male   = predictions.find(p=>p.className.toLowerCase().includes("male"));
+
+        let label=null;
+        if(female && female.probability>0.8) label="female";
+        else if(male && male.probability>0.7) label="male";
+
+        if(label && (label!==lastLabel || now-lastDetectionTime>9000)){
+          lastLabel = label; lastDetectionTime = now;
+
+          if(label==="female"){
+            message.textContent = "أهلاً وسهلاً بكِ سيدتي";
+            audio.src = "Female.mp3";
+            renderGallery([
+              "female_store.jpg",
+              "famale_store3.jpeg",
+              "famale_store4.jpeg",
+              "famale_store5.jpg",
+              "famale_store6.jpg"
+            ]);
+          }else{
+            message.textContent = "أهلاً وسهلاً بك سيدي";
+            audio.src = "Male.mp3";
+            renderGallery([
+              "male_store.jpg",
+              "male_store1.jpeg",
+              "male_store2.jpeg",  // ← الامتداد الصحيح حسب مجلدك
+              "male_store3.jpg",
+              "male_store4.jpg"
+            ]);
+          }
+          audio.play().catch(()=>{});
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>
